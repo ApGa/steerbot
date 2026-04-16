@@ -1,0 +1,30 @@
+[build-system]
+requires = ["hatchling"]
+build-backend = "hatchling.build"
+
+[project]
+name = "steerbot"
+version = "0.1.0"
+description = "Steer your agent with programmable constraints!"
+readme = "README.md"
+authors = [
+    {name = "Apurva Gandhi", email = "apurvag@cs.cmu.edu"}
+]
+requires-python = ">=3.12"
+dependencies = [
+    "genlm-control>=0.3.0",
+    "litellm>=1.83.8",
+    "platoon",
+    "platoon_textcraft"
+]
+
+
+[tool.uv]
+override-dependencies = [
+    "transformers==4.53",
+    "tokenizers>=0.21,<0.22"
+]
+
+[tool.uv.sources]
+platoon = { git = "https://github.com/ApGa/platoon.git" }
+platoon_textcraft = { git = "https://github.com/ApGa/platoon.git", subdirectory = "plugins/textcraft" }
