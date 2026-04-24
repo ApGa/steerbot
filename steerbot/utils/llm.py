@@ -6,7 +6,7 @@ from litellm.llms.custom_llm import CustomLLM
 from litellm.utils import custom_llm_setup
 from litellm.types.utils import Choices, ModelResponse, Usage, Message
 from genlm.control.potential import Potential
-from genlm.control import PromptedLLM, AWRS
+from genlm.control import PromptedLLM, AWRS, direct_token_sampler
 from genlm.control.constant import EndOfSequence
 from typing import Any
 from transformers import AutoTokenizer
@@ -55,13 +55,20 @@ def generate_id(prefix: str) -> str:
 
 class SteeredLM(CustomLLM):
     """LiteLLM Wrapper around genlm-control's PromptedLLM to support loading steered LMs 
-    with an OpenAI chat completions compatible API."""
+    with an OpenAI chat completions compatible API.
+
+    If ``potential_eff`` is ``None``, generation uses :func:`direct_token_sampler` on the
+    base ``PromptedLLM`` (no grammar / rejection). Otherwise ``AWRS`` is used with the
+    coerced efficient potential as the Boolean condition.
+    """
 
     def __init__(
         self,
         model_name_or_path: str,
         potential_eff: Potential | None = None,
         potential_exp: Potential | None = None,
+        extra_system_prompt: str | None = None,
+        extra_prompt_keep_original_system: bool = False,
         temperature: float = 1.0,
         engine_opts: dict[str, Any] | None = None,
         n_particles: int = 10,
@@ -76,6 +83,8 @@ class SteeredLM(CustomLLM):
         
         self.potential_eff = potential_eff
         self.potential_exp = potential_exp
+        self.extra_system_prompt = extra_system_prompt
+        self.extra_prompt_keep_original_system = extra_prompt_keep_original_system
 
         self.temperature = temperature
         self.engine_opts = engine_opts
@@ -104,18 +113,18 @@ class SteeredLM(CustomLLM):
         custom_llm_setup()
     
 
-    async def _prepare_model_input(self, **kwargs) -> list[int]:
-        """Messages -> token ids"""
+    async def _prepare_model_input(self, *, messages: list[dict]) -> list[int]:
+        """Messages -> token ids."""
         return await asyncio.to_thread(
             self.tokenizer.apply_chat_template,
-            kwargs.pop('messages'),
+            messages,
             tokenize=True,
             add_generation_prompt=True,
         )
 
     async def acompletion(self, **kwargs):
-        
-        prompt_ids = await self._prepare_model_input(**kwargs)
+        messages = kwargs.pop("messages")
+        prompt_ids = await self._prepare_model_input(messages=messages)
         temperature = kwargs.pop('temperature', self.temperature)
         n_particles = kwargs.pop('n_particles', self.n_particles)
         ess_threshold = kwargs.pop('ess_threshold', self.ess_threshold)
@@ -128,11 +137,40 @@ class SteeredLM(CustomLLM):
             temperature=temperature,
         )
 
-        # Sampling from Proposal Distribution: 
-        # "Local Product of Experts" between efficient potential and base prompt-conditioned llm
-        # Sampling is done efficiently using Adaptive Weighted Rejection Sampling (AWRS):
+        # Prompt intersection: multiply the base prompted LM with a second prompted LM that uses
+        # an extra system prompt prepended to the message list. This is useful when the upstream
+        # caller (e.g. Platoon agent) constructs system messages internally.
+        if self.extra_system_prompt:
+            if self.potential_eff is not None:
+                raise NotImplementedError(
+                    "extra_system_prompt with potential_eff is not supported yet "
+                    "(would require defining the AWRS condition over the product LM)."
+                )
+
+            # By default, we *exclude* upstream system prompts from the second LM, so it reflects
+            # only the user's custom instruction plus the non-system conversation context.
+            # (Otherwise you tend to double-count / entangle Platoon's own system policy.)
+            extra_tail = (
+                list(messages)
+                if self.extra_prompt_keep_original_system
+                else [m for m in messages if m.get("role") != "system"]
+            )
+            extra_messages = [{"role": "system", "content": self.extra_system_prompt}] + extra_tail
+            extra_prompt_ids = await self._prepare_model_input(messages=extra_messages)
+            extra_llm = get_llm(
+                self.model_name_or_path,
+                prompt_ids=extra_prompt_ids,
+                temperature=temperature,
+            )
+            llm = llm * extra_llm
+
+        # Unconstrained: sample directly from the prompted LM (no grammar / Boolean constraint).
+        # Constrained: AWRS with a Boolean ``potential_eff`` (e.g. BoolFSA or product with caps).
         # https://arxiv.org/abs/2504.05410
-        token_sampler = AWRS(llm, self.potential_eff.coerce(llm, f=b"".join))
+        if self.potential_eff is None:
+            token_sampler = direct_token_sampler(llm)
+        else:
+            token_sampler = AWRS(llm, self.potential_eff.coerce(llm, f=b"".join))
 
         sequences = await token_sampler.smc(
             n_particles=n_particles,
@@ -141,7 +179,11 @@ class SteeredLM(CustomLLM):
             verbosity=verbosity,
             # Expensive potential ("critic") used in importance weight correction as described in:
             # https://arxiv.org/abs/2504.13139
-            critic=self.potential_exp.spawn() if self.potential_exp is not None else None,
+            critic=(
+                self.potential_exp.spawn().coerce(llm, f=b"".join)
+                if self.potential_exp is not None
+                else None
+            ),
         )
 
         choices = []

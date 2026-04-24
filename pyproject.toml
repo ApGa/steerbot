@@ -14,8 +14,10 @@ requires-python = ">=3.12"
 dependencies = [
     "genlm-control>=0.3.0",
     "litellm>=1.83.8",
+    "notebook>=7.5.5",
     "platoon",
-    "platoon_textcraft"
+    "platoon_textcraft",
+    "platoon_number_search"
 ]
 
 
@@ -28,3 +30,4 @@ override-dependencies = [
 [tool.uv.sources]
 platoon = { git = "https://github.com/ApGa/platoon.git" }
 platoon_textcraft = { git = "https://github.com/ApGa/platoon.git", subdirectory = "plugins/textcraft" }
+platoon_number_search = { git = "https://github.com/ApGa/platoon.git", subdirectory = "plugins/number-search" }

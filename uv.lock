@@ -3370,6 +3370,14 @@ dependencies = [
 ]
 
 [[package]]
+name = "platoon-number-search"
+version = "0.1.0"
+source = { git = "https://github.com/ApGa/platoon.git?subdirectory=plugins%2Fnumber-search#68c47bb19f6eeb336b6ec4b5c9fa22d18c706f54" }
+dependencies = [
+    { name = "platoon" },
+]
+
+[[package]]
 name = "platoon-textcraft"
 version = "0.1.0"
 source = { git = "https://github.com/ApGa/platoon.git?subdirectory=plugins%2Ftextcraft#68c47bb19f6eeb336b6ec4b5c9fa22d18c706f54" }
@@ -4527,7 +4535,9 @@ source = { editable = "." }
 dependencies = [
     { name = "genlm-control" },
     { name = "litellm" },
+    { name = "notebook" },
     { name = "platoon" },
+    { name = "platoon-number-search" },
     { name = "platoon-textcraft" },
 ]
 
@@ -4535,7 +4545,9 @@ dependencies = [
 requires-dist = [
     { name = "genlm-control", specifier = ">=0.3.0" },
     { name = "litellm", specifier = ">=1.83.8" },
+    { name = "notebook", specifier = ">=7.5.5" },
     { name = "platoon", git = "https://github.com/ApGa/platoon.git" },
+    { name = "platoon-number-search", git = "https://github.com/ApGa/platoon.git?subdirectory=plugins%2Fnumber-search" },
     { name = "platoon-textcraft", git = "https://github.com/ApGa/platoon.git?subdirectory=plugins%2Ftextcraft" },
 ]
 
