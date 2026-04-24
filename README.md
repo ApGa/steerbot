@@ -18,6 +18,9 @@ uv sync
 - `examples/run_vllm_rollouts.py`: baseline rollouts against a plain OpenAI-compatible vLLM server.
 - `examples/run_genlm_shard_jobs.sh`: shard launcher for the genlm-based experiments above.
 
+## Utils
+- `steerbot/utils/llm.py`: provides core wrapper interface to register and expose genlm models using the OpenAI/LiteLLM API.
+
 ## Quick Start
 
 ```bash
