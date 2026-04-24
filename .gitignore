@@ -2,3 +2,4 @@ rollout_results/
 dist
 .venv
 __pycache__
+rollout_results*/
